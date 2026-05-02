@@ -37,7 +37,12 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = python -c "import re, pathlib; t=pathlib.Path('lang.py').read_text(encoding='utf-8'); m=re.search(r'^VERSION\s*=\s*\"([^\"]+)\"', t, re.M); print(m.group(1) if m else '0.0.0')"
+          $match = Select-String -Path "lang.py" -Pattern '^VERSION\s*=\s*"([^"]+)"'
+          if ($match.Matches.Count -gt 0) {
+            $version = $match.Matches[0].Groups[1].Value
+          } else {
+            $version = "0.0.0"
+          }
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Compile installer (Inno Setup)
