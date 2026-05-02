@@ -1,0 +1,16 @@
+#!/bin/bash
+FLINT_HOME="$HOME/.flint"
+BUNDLED="$(cd "$(dirname "$0")/../Resources" && pwd)/lang.py"
+
+if [ ! -f "$FLINT_HOME/lang.py" ]; then
+    mkdir -p "$FLINT_HOME"
+    cp "$BUNDLED" "$FLINT_HOME/lang.py"
+fi
+
+mkdir -p "$HOME/Documents/flint"
+
+# Keep Flint launcher as the app process so macOS shows Flint icon/name.
+"/Library/Frameworks/Python.framework/Versions/3.13/bin/python3" "$FLINT_HOME/lang.py" &
+FLINT_CHILD_PID=$!
+wait $FLINT_CHILD_PID
+exit $?
