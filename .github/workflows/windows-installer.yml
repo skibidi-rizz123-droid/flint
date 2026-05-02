@@ -1,0 +1,59 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "lang.py"
+      - "build_windows.ps1"
+      - "requirements-windows.txt"
+      - "installer/flint.iss"
+      - ".github/workflows/windows-installer.yml"
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build Flint Windows app folder
+        shell: pwsh
+        run: .\build_windows.ps1 -Clean
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Extract app version from lang.py
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c "import re, pathlib; t=pathlib.Path('lang.py').read_text(encoding='utf-8'); m=re.search(r'^VERSION\s*=\s*\"([^\"]+)\"', t, re.M); print(m.group(1) if m else '0.0.0')"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Compile installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.version }}" "installer\flint.iss"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flint-Setup-${{ steps.version.outputs.version }}
+          path: dist-installer/Flint-Setup.exe
+
+      - name: Upload portable app folder artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flint-Windows-Portable-${{ steps.version.outputs.version }}
+          path: dist/Flint/**

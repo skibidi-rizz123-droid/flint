@@ -49,6 +49,23 @@ Install [Inno Setup](https://jrsoftware.org/isinfo.php), then:
 2. Click **Build** in Inno Setup
 3. Output installer appears in `dist-installer\Flint-Setup.exe`
 
+## 4) Build installer automatically in GitHub (from Mac)
+
+This repo now includes:
+
+- `.github/workflows/windows-installer.yml`
+
+How to use it:
+
+1. Push your latest code to `main`
+2. Open GitHub → **Actions** → **Build Windows Installer**
+3. Click **Run workflow**
+4. When it finishes, download artifacts:
+   - `Flint-Setup-<version>` (installer EXE)
+   - `Flint-Windows-Portable-<version>` (portable folder)
+
+This is the easiest way to produce a real Windows installer while staying on macOS.
+
 ## Important note about auto-update
 
 Current Flint auto-update edits `lang.py` directly. In packaged Windows EXEs, that direct self-edit path may not behave the same as macOS script mode.
