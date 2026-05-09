@@ -20,6 +20,8 @@ import time
 import inspect
 import urllib.request
 import ssl
+import json
+import base64
 import os
 import sys
 
@@ -35,24 +37,30 @@ def _projects_dir():
 # Set this to your GitHub repo once you create it.
 # Format:  "your-github-username/flint"
 GITHUB_REPO = "skibidi-rizz123-droid/flint"
-VERSION     = "0.1.10"
+VERSION     = "1.0.0"
 
 def _check_update():
     if not GITHUB_REPO:
         return
     try:
-        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/lang.py"
+        api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/lang.py?ref=main"
+        req = urllib.request.Request(
+            api_url,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "Flint-Updater"},
+        )
         try:
-            with urllib.request.urlopen(url, timeout=3) as r:
-                latest = r.read().decode()
+            with urllib.request.urlopen(req, timeout=5) as r:
+                payload = json.loads(r.read().decode())
+                latest = base64.b64decode(payload["content"]).decode()
         except Exception:
             # Some Python installs on macOS have broken cert chains.
             # Retry with an unverified context so updates still work.
             insecure_ctx = ssl.create_default_context()
             insecure_ctx.check_hostname = False
             insecure_ctx.verify_mode = ssl.CERT_NONE
-            with urllib.request.urlopen(url, timeout=3, context=insecure_ctx) as r:
-                latest = r.read().decode()
+            with urllib.request.urlopen(req, timeout=5, context=insecure_ctx) as r:
+                payload = json.loads(r.read().decode())
+                latest = base64.b64decode(payload["content"]).decode()
         for line in latest.splitlines():
             if line.startswith("VERSION"):
                 latest_ver = line.split('"')[1]
@@ -712,10 +720,14 @@ def _exec_if_chain(lines, i):
         if text.startswith('if '):
             branch_type = 'if'
             cond = text[3:].strip()
+            if cond.endswith(':'):
+                cond = cond[:-1].strip()
         elif text.startswith('elif '):
             branch_type = 'elif'
             cond = text[5:].strip()
-        elif text == 'else':
+            if cond.endswith(':'):
+                cond = cond[:-1].strip()
+        elif text in ('else', 'else:'):
             branch_type = 'else'
             cond = None
         else:
@@ -778,7 +790,7 @@ def _exec_if_chain(lines, i):
         if _indent_of(lines[j]) != if_indent:
             return i
         nxt_text = lines[j].strip()
-        if nxt_text.startswith('elif ') or nxt_text == 'else':
+        if nxt_text.startswith('elif ') or nxt_text in ('else', 'else:'):
             i = j
             continue
         return i
@@ -803,7 +815,7 @@ def _exec_block(lines, i, parent_indent):
         text = raw.strip()
         if text.startswith('if '):
             i = _exec_if_chain(lines, i)
-        elif text.startswith('elif ') or text == 'else':
+        elif text.startswith('elif ') or text in ('else', 'else:'):
             _err(f"'{text.split()[0]}' without matching if", i + 1)
             i += 1
         else:
