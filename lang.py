@@ -34,7 +34,7 @@ def _projects_dir():
 # Set this to your GitHub repo once you create it.
 # Format:  "your-github-username/flint"
 GITHUB_REPO = "skibidi-rizz123-droid/flint"
-VERSION     = "0.1.8"
+VERSION     = "0.1.9"
 
 def _check_update():
     if not GITHUB_REPO:
