@@ -33,8 +33,8 @@ def _projects_dir():
 # ── Auto-updater ──────────────────────────────
 # Set this to your GitHub repo once you create it.
 # Format:  "your-github-username/flint"
-GITHUB_REPO = ""          # e.g. "henrymarcais/flint"
-VERSION     = "0.1.2"
+GITHUB_REPO = "skibidi-rizz123-droid/flint"
+VERSION     = "0.1.8"
 
 def _check_update():
     if not GITHUB_REPO:
@@ -69,6 +69,7 @@ import bext
 
 FUNCTIONS = {}
 VARIABLES = {}
+_GUI_APP = None
 
 def lang_function(color='white'):
     """Decorator — registers a function and gives it a highlight color."""
@@ -88,14 +89,36 @@ FUNCTIONS['float'] = lambda a: builtins.float(a)
 FUNCTIONS['float']._lang_color = 'cyan'
 FUNCTIONS['str'] = lambda a: builtins.str(a)
 FUNCTIONS['str']._lang_color = 'cyan'
-FUNCTIONS['sleep'] = lambda a: time.sleep(a)
+def _flint_sleep(a):
+    """Pause execution while keeping GUI responsive and accepting numeric strings."""
+    secs = builtins.float(a)
+    if secs < 0:
+        raise ValueError("sleep seconds must be >= 0")
+
+    if _GUI_APP and getattr(_GUI_APP, 'root', None):
+        end = time.time() + secs
+        while True:
+            rem = end - time.time()
+            if rem <= 0:
+                break
+            try:
+                _GUI_APP.root.update_idletasks()
+                _GUI_APP.root.update()
+            except Exception:
+                # If window closes during sleep, just finish the pause.
+                pass
+            time.sleep(min(0.05, rem))
+    else:
+        time.sleep(secs)
+FUNCTIONS['sleep'] = _flint_sleep
 FUNCTIONS['sleep']._lang_color = 'cyan'
 
 # ─────────────────────────────────────
 #  YOUR FUNCTIONS
 #  Set color= to any of:
-#  'red' 'green' 'blue' 'yellow'
-#  'cyan' 'magenta' 'orange' 'white'
+#  many names in COLOR_MAP (see below),
+#  e.g. 'red' 'lime' 'deepskyblue'
+#  'gold' 'violet' 'white'
 # ─────────────────────────────────────
 
 @lang_function(color='red')
@@ -187,17 +210,49 @@ def randfloat(a, b):
     return random.uniform(a, b)
 
 @lang_function(color='red')
-def random_binary(a):
+def random_binary():
     return random.choice([0, 1])
 
 @lang_function(color='red')
-def random_choice(a):
-    return random.choice(a)
+def random_choice(*args):
+    if not args:
+        raise TypeError("random_choice needs at least 1 argument")
+    if len(args) == 1:
+        return random.choice(args[0])
+    return random.choice(args)
 
 @lang_function(color='red')
-def random_shuffle(a):
-    random.shuffle(a)
-    return a
+def random_shuffle(*args):
+    if not args:
+        raise TypeError("random_shuffle needs a sequence or multiple arguments")
+
+    # random_shuffle(1, 2, 3) -> shuffled list of those values
+    if len(args) > 1:
+        out = list(args)
+        random.shuffle(out)
+        return out
+
+    seq = args[0]
+
+    # Strings: return a shuffled string
+    if isinstance(seq, str):
+        out = list(seq)
+        random.shuffle(out)
+        return ''.join(out)
+
+    # Lists: shuffle a copy so callers don't get accidental mutation surprises
+    if isinstance(seq, list):
+        out = seq[:]
+        random.shuffle(out)
+        return out
+
+    # Tuples / other iterables: return a shuffled list
+    try:
+        out = list(seq)
+    except TypeError:
+        raise TypeError("random_shuffle needs an iterable or multiple arguments")
+    random.shuffle(out)
+    return out
 
 @lang_function(color='cyan')
 def is_even(a):
@@ -226,9 +281,13 @@ def is_negative(a):
 
 @lang_function(color='cyan')
 def draw_txt_line(text, color, x):
-    bext.fg(color)
-    builtins.print(text * x)
-    bext.fg('reset')
+    line = builtins.str(text) * builtins.int(x)
+    color_key = builtins.str(color).lower()
+    if _GUI_APP:
+        # In GUI mode, route through output tags (ANSI terminal colors are ignored).
+        _emit(line, color_key if color_key in COLOR_MAP else 'normal')
+    else:
+        _print_terminal_colored(line, color_key)
 
 @lang_function(color='red')
 def pi():
@@ -241,26 +300,129 @@ def e():
 @lang_function(color='red')
 def phi():
     return (1 + math.sqrt(5)) / 2
+
+@lang_function(color='red')
+def fibonacci(n):
+    n = builtins.int(n)
+    if n <= 0:
+        return 0
+    if n == 1:
+        return 1
+
+    # Iterative O(n) Fibonacci (no recursion blowups).
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b
 # ─────────────────────────────────────
 #  INFRASTRUCTURE  (don't touch below)
 # ─────────────────────────────────────
 
 COLOR_MAP = {
-    'red':     '#ff4444',
-    'green':   '#44ff44',
-    'blue':    '#4488ff',
-    'yellow':  '#ffff44',
-    'cyan':    '#44ffff',
-    'magenta': '#ff44ff',
-    'orange':  '#ff8800',
-    'white':   '#e6edf3',
+    'black': '#000000',
+    'white': '#ffffff',
+    'gray': '#808080',
+    'grey': '#808080',
+    'lightgray': '#d3d3d3',
+    'lightgrey': '#d3d3d3',
+    'darkgray': '#a9a9a9',
+    'darkgrey': '#a9a9a9',
+    'silver': '#c0c0c0',
+
+    'red': '#ff0000',
+    'darkred': '#8b0000',
+    'crimson': '#dc143c',
+    'firebrick': '#b22222',
+    'tomato': '#ff6347',
+    'salmon': '#fa8072',
+    'coral': '#ff7f50',
+    'orangered': '#ff4500',
+    'pink': '#ffc0cb',
+    'hotpink': '#ff69b4',
+    'deeppink': '#ff1493',
+
+    'orange': '#ffa500',
+    'darkorange': '#ff8c00',
+    'gold': '#ffd700',
+    'khaki': '#f0e68c',
+    'peachpuff': '#ffdab9',
+
+    'yellow': '#ffff00',
+    'lightyellow': '#ffffe0',
+    'lemonchiffon': '#fffacd',
+
+    'green': '#008000',
+    'lime': '#00ff00',
+    'limegreen': '#32cd32',
+    'forestgreen': '#228b22',
+    'darkgreen': '#006400',
+    'olivedrab': '#6b8e23',
+    'olive': '#808000',
+    'seagreen': '#2e8b57',
+    'springgreen': '#00ff7f',
+    'mint': '#98ff98',
+    'lightgreen': '#90ee90',
+
+    'cyan': '#00ffff',
+    'aqua': '#00ffff',
+    'teal': '#008080',
+    'turquoise': '#40e0d0',
+    'darkturquoise': '#00ced1',
+    'lightcyan': '#e0ffff',
+
+    'blue': '#0000ff',
+    'navy': '#000080',
+    'royalblue': '#4169e1',
+    'dodgerblue': '#1e90ff',
+    'deepskyblue': '#00bfff',
+    'skyblue': '#87ceeb',
+    'steelblue': '#4682b4',
+    'lightblue': '#add8e6',
+    'midnightblue': '#191970',
+
+    'purple': '#800080',
+    'indigo': '#4b0082',
+    'violet': '#ee82ee',
+    'plum': '#dda0dd',
+    'orchid': '#da70d6',
+    'magenta': '#ff00ff',
+    'fuchsia': '#ff00ff',
+    'darkviolet': '#9400d3',
+    'blueviolet': '#8a2be2',
+    'mediumpurple': '#9370db',
+
+    'brown': '#a52a2a',
+    'sienna': '#a0522d',
+    'chocolate': '#d2691e',
+    'maroon': '#800000',
+    'tan': '#d2b48c',
+    'burlywood': '#deb887',
+
+    'beige': '#f5f5dc',
+    'ivory': '#fffff0',
+    'lavender': '#e6e6fa',
+    'snow': '#fffafa',
 }
+
+def _print_terminal_colored(text, color_key):
+    hex_color = COLOR_MAP.get(color_key)
+    if not hex_color:
+        builtins.print(text)
+        return
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    builtins.print(f"\033[38;2;{r};{g};{b}m{text}\033[0m")
+
+# Syntax color for control-flow keywords in editor.
+# Change this to any key in COLOR_MAP (example: "gold", "deepskyblue", "violet").
+KEYWORD_COLOR = "gold"
+CONTROL_KEYWORDS = ("if", "elif", "else")
 
 # ── GUI output routing ─────────────────────────────────────────────────────
 # When the Tkinter app is running, _GUI_APP points to it and all
 # output/errors are routed there instead of the terminal.
-
-_GUI_APP = None
 
 def _emit(msg, kind='normal'):
     if _GUI_APP:
@@ -493,6 +655,155 @@ def _eval_rpn(rpn):
 
 def _err(msg, line_num):
     _emit(f"  error on line {line_num}: {msg}", 'error')
+
+def _indent_of(raw_line):
+    expanded = raw_line.replace('\t', '    ')
+    return len(expanded) - len(expanded.lstrip(' '))
+
+def _is_comment_or_blank(raw_line):
+    s = raw_line.strip()
+    return (not s) or s.startswith('#')
+
+def _next_code_idx(lines, i):
+    while i < len(lines) and _is_comment_or_blank(lines[i]):
+        i += 1
+    return i if i < len(lines) else None
+
+def _eval_expr(expr, line_num):
+    tokens = _tokenize(expr)
+    rpn = _shunting_yard(tokens)
+    return _eval_rpn(rpn)
+
+def _skip_block(lines, i, parent_indent):
+    while i < len(lines):
+        if _is_comment_or_blank(lines[i]):
+            i += 1
+            continue
+        if _indent_of(lines[i]) <= parent_indent:
+            break
+        i += 1
+    return i
+
+def _exec_if_chain(lines, i):
+    # Handles:
+    # if cond
+    #     ...
+    # elif cond
+    #     ...
+    # else
+    #     ...
+    if_indent = _indent_of(lines[i])
+    branch_taken = False
+
+    while i < len(lines):
+        line_num = i + 1
+        text = lines[i].strip()
+
+        if text.startswith('if '):
+            branch_type = 'if'
+            cond = text[3:].strip()
+        elif text.startswith('elif '):
+            branch_type = 'elif'
+            cond = text[5:].strip()
+        elif text == 'else':
+            branch_type = 'else'
+            cond = None
+        else:
+            break
+
+        if not cond and branch_type in ('if', 'elif'):
+            _err(f"missing condition after '{branch_type}'", line_num)
+            return i + 1
+
+        i += 1
+        nxt = _next_code_idx(lines, i)
+        if nxt is None or _indent_of(lines[nxt]) <= if_indent:
+            _err(f"expected indented block after '{branch_type}'", line_num)
+            return i
+
+        if branch_type == 'else':
+            if branch_taken:
+                i = _skip_block(lines, i, if_indent)
+            else:
+                i = _exec_block(lines, i, if_indent)
+                branch_taken = True
+            break
+        else:
+            if branch_taken:
+                i = _skip_block(lines, i, if_indent)
+            else:
+                try:
+                    should_run = bool(_eval_expr(cond, line_num))
+                except SyntaxError as e:
+                    msg = str(e)
+                    if 'None' in msg or 'EOF' in msg.upper():
+                        _err("missing ')'", line_num)
+                    else:
+                        _err(f"syntax error — {msg}", line_num)
+                    return i
+                except NameError as e:
+                    msg = str(e)
+                    if 'Unknown function' in msg:
+                        name = msg.split("'")[1]
+                        _err(f"'{name}' is not a function", line_num)
+                    elif 'Unknown variable' in msg:
+                        name = msg.split("'")[1]
+                        _err(f"'{name}' has no value — use  {name} = ...  first", line_num)
+                    else:
+                        _err(msg, line_num)
+                    return i
+                except Exception as e:
+                    _err(str(e), line_num)
+                    return i
+
+                if should_run:
+                    i = _exec_block(lines, i, if_indent)
+                    branch_taken = True
+                else:
+                    i = _skip_block(lines, i, if_indent)
+
+        j = _next_code_idx(lines, i)
+        if j is None:
+            return i
+        if _indent_of(lines[j]) != if_indent:
+            return i
+        nxt_text = lines[j].strip()
+        if nxt_text.startswith('elif ') or nxt_text == 'else':
+            i = j
+            continue
+        return i
+
+    return i
+
+def _exec_block(lines, i, parent_indent):
+    while i < len(lines):
+        raw = lines[i]
+        if _is_comment_or_blank(raw):
+            i += 1
+            continue
+
+        indent = _indent_of(raw)
+        if indent <= parent_indent:
+            break
+        if parent_indent == -1 and indent > 0:
+            _err("unexpected indentation at top level", i + 1)
+            i += 1
+            continue
+
+        text = raw.strip()
+        if text.startswith('if '):
+            i = _exec_if_chain(lines, i)
+        elif text.startswith('elif ') or text == 'else':
+            _err(f"'{text.split()[0]}' without matching if", i + 1)
+            i += 1
+        else:
+            _run_line(text, i + 1)
+            i += 1
+    return i
+
+def _run_program(code):
+    lines = code.splitlines()
+    _exec_block(lines, 0, -1)
 
 def _run_line(line, line_num):
     line = line.strip()
@@ -930,12 +1241,16 @@ class FlintApp:
         self.output.tag_config('error',  foreground='#ff4444')
         self.output.tag_config('result', foreground='#888888')
         self.output.tag_config('normal', foreground=self.FG)
+        for color_name, hex_color in COLOR_MAP.items():
+            self.output.tag_config(color_name, foreground=hex_color)
         self.output.config(state='disabled')
 
         # editor syntax tags
         self.code.tag_config('_str',    foreground='#44ff88')
         self.code.tag_config('_num',    foreground='#79c0ff')
         self.code.tag_config('_var',    foreground='#e6edf3')
+        kw_hex = COLOR_MAP.get(KEYWORD_COLOR.lower(), '#deb887')
+        self.code.tag_config('_kw_control', foreground=kw_hex)
         for fn_name, fn in FUNCTIONS.items():
             color = COLOR_MAP.get(getattr(fn, '_lang_color', 'white'), '#e6edf3')
             self.code.tag_config(f'_fn_{fn_name}', foreground=color)
@@ -1004,6 +1319,8 @@ class FlintApp:
                     while j < len(line) and (line[j].isalnum() or line[j] == '_'):
                         j += 1
                     word = line[i:j]
+                    if word in CONTROL_KEYWORDS:
+                        text.tag_add('_kw_control', f'{row}.{i}', f'{row}.{j}')
                     if word in FUNCTIONS:
                         text.tag_add(f'_fn_{word}', f'{row}.{i}', f'{row}.{j}')
                     i = j
@@ -1040,8 +1357,7 @@ class FlintApp:
             tkdialog.askstring("Input", str(prompt), parent=self.root) or ''
 
         try:
-            for line_num, line in enumerate(code.splitlines(), 1):
-                _run_line(line, line_num)
+            _run_program(code)
             self._status_lbl.config(text="done ✓", fg="#44dd55")
         except Exception:
             self._status_lbl.config(text="error", fg="#ff4444")
