@@ -19,6 +19,7 @@ import random
 import time
 import inspect
 import urllib.request
+import ssl
 import os
 import sys
 
@@ -34,15 +35,24 @@ def _projects_dir():
 # Set this to your GitHub repo once you create it.
 # Format:  "your-github-username/flint"
 GITHUB_REPO = "skibidi-rizz123-droid/flint"
-VERSION     = "0.1.9"
+VERSION     = "0.1.10"
 
 def _check_update():
     if not GITHUB_REPO:
         return
     try:
         url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/lang.py"
-        with urllib.request.urlopen(url, timeout=3) as r:
-            latest = r.read().decode()
+        try:
+            with urllib.request.urlopen(url, timeout=3) as r:
+                latest = r.read().decode()
+        except Exception:
+            # Some Python installs on macOS have broken cert chains.
+            # Retry with an unverified context so updates still work.
+            insecure_ctx = ssl.create_default_context()
+            insecure_ctx.check_hostname = False
+            insecure_ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(url, timeout=3, context=insecure_ctx) as r:
+                latest = r.read().decode()
         for line in latest.splitlines():
             if line.startswith("VERSION"):
                 latest_ver = line.split('"')[1]
